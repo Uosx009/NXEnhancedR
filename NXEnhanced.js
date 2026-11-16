@@ -5,6 +5,7 @@
 // License         https://github.com/hjk789/NXEnhanced#license
 // SupportURL      https://github.com/hjk789/NXEnhanced/issues
 // Copyright (c) 2020+ BLBC (github.com/hjk789)
+// Modified build: NXEnhancedR by Uosx009 — https://github.com/Uosx009/NXEnhancedR
 
 let currentPage = location.href
 const intervals = []
@@ -233,7 +234,9 @@ function main()
                     loadBeforeInput.className = "form-control form-control-sm mx-3"
                     loadBeforeInput.type = "datetime-local"
                     loadBeforeInput.style = "border-radius: 16px; width: initial;"
-                    loadBeforeInput.value = new Date().toISOString().replace(/:\d+\.\d+Z$/,"")        // Set the input's value as the current date-time in the user's locale, without the comma after the year.
+                    const nowLocal = new Date()
+nowLocal.setMinutes(nowLocal.getMinutes() - nowLocal.getTimezoneOffset())       // toISOString returns UTC time, but the input displays and parses in local time.
+loadBeforeInput.value = nowLocal.toISOString().slice(0,16)                      // Set the input's value as the current local date-time, in "YYYY-MM-DDTHH:MM" format.
                     loadBeforeInput.onchange = function()
                     {
                         loadBeforeInputChanged = this.value != ""       // Only treat the input as changed when it's not cleared.
@@ -258,14 +261,22 @@ function main()
                     loadBeforeGoButton.id = "loadBeforeGoButton"
                     loadBeforeGoButton.style = "margin-right: 50px; padding-top: 3px; height: 34px;"
                     loadBeforeGoButton.textContent = "Go"
-                    loadBeforeGoButton.onclick = function()
-                    {
-                        if (this.previousSibling.type == "datetime-local")
-                            reloadLogs({before: this.previousSibling.valueAsNumber})
-                        else
-                            reloadLogs({before: Date.parse(this.previousSibling.value)})
+                                    loadBeforeGoButton.onclick = function()
+                {
+                    const input = this.previousSibling
+                    const before = input.type == "datetime-local" ? input.valueAsNumber : Date.parse(input.value)
 
+                    if (isNaN(before))                      // If the input is empty or invalid, load the latest logs instead of sending a broken "to=NaN" request, which would fail and leave the loader stuck.
+                    {
+                        loadBeforeInputChanged = false
+                        reloadLogs()
                     }
+                    else
+                    {
+                        loadBeforeInputChanged = true       // Mark the filter as active, so that searching and refreshing keep listing queries before the chosen date.
+                        reloadLogs({before: before})
+                    }
+                }
 
                     loadBeforeContainer.appendChild(loadBeforeGoButton)
                 }
@@ -384,7 +395,13 @@ function main()
                 const refreshButton = document.createElement("button")
                 refreshButton.className = "btn btn-primary"
                 refreshButton.style = "font-size: x-large; padding: 0px 2px; height: 25px; margin-right: 10px; margin-top: 3px;"
-                refreshButton.onclick = function() { reloadLogs() }
+                refreshButton.onclick = function()
+{
+    if (loadBeforeInputChanged)
+        loadBeforeGoButton.click()          // Keep listing queries before the chosen date when refreshing.
+    else
+        reloadLogs()
+}
 
                 const icon = document.createElement("div")
                 icon.style = "margin-top: -9px;"
@@ -412,8 +429,8 @@ function main()
                 {
                     if (e.key == "Enter")
                     {
-                        searchItems = this.value.split(" ")
-                        searchString = searchItems.splice(0,1)     // Take only the first term to make the request. The other terms are used by NXE as filters for the results.
+                        searchItems = this.value.split(" ").filter(t => t != "" && t != "-")     // Ignore empty terms and a lone "-", as an empty exclusion term matches every domain.
+searchString = searchItems.shift()     // Take only the first term to make the request. The other terms are used by NXE as filters for the results.
 
                         if (loadBeforeInputChanged)
                             document.getElementById("loadBeforeGoButton").click()
@@ -843,7 +860,10 @@ function main()
                     for (let i = 0; i < existingEntries.length; i++)
                         existingEntries[i].remove()                                 // If clear is true, then remove all the loaded log entries to load again.
 
-                    visibleEntriesCountEll.textContent = filteredEntriesCountEll.textContent = loadedEntriesCountEll.textContent = 0 // = allHiddenEntriesCountEll.textContent
+                                        visibleEntriesCountEll.textContent = filteredEntriesCountEll.textContent = loadedEntriesCountEll.textContent = 0 // = allHiddenEntriesCountEll.textContent
+
+                    const logsLoadError = document.getElementById("logsLoadError")
+                    if (logsLoadError)  logsLoadError.remove()
                 }
             }
 
@@ -909,7 +929,7 @@ function main()
                             // Check if the entry matches any filter, and if so, remove it from the list
                             {
                                 var domainName = entriesData[i].domain
-                                var rootDomain = entriesData[i].root
+                                var rootDomain = entriesData[i].root || domainName
                                 var isNamedDevice = !!entriesData[i].device
 
                                 if ((filtering && !domainName.includes("."))        // Chrome's random queries never have a dot.
@@ -1021,7 +1041,7 @@ function main()
                                             }
 
                                             const blockReason = document.createElement("span")
-                                            blockReason.textContent = (status == "allowed" ? "Allowed" : "Blocked") + " by " + entriesData[i].reasons.map(r => r.name).join(", ")
+                                            blockReason.textContent = (status == "allowed" ? "Allowed" : "Blocked") + " by " + (entriesData[i].reasons || []).map(r => r.name).join(", ")
 
                                             blockReasonTooltipElements.push(blockReason)
 
@@ -1195,6 +1215,24 @@ function main()
 
                     if (entriesData.length < 7 && document.body.getBoundingClientRect().bottom < window.innerHeight + 400)              // 400 is the vertical space taken by 6 entries.
                         scrollTo(0, document.body.scrollHeight)                                                                         // Automatically scroll to bottom when less than 7 entries of the chunk are listed.
+                                }
+            }).catch(function(error)
+            {
+                // If the request or the rendering failed, reset the loader state and remove the spinner, otherwise the logs
+                // would get stuck loading forever, as the loadingChunk flag would stay set and block all further loads.
+                loadingChunk = false
+                cancelLoading = false
+
+                const spinner = logsContainer.getByClass("spinner-border")
+                if (spinner)  spinner.remove()
+
+                if (!document.getElementById("logsLoadError") && error != "fatigue")            // The "fatigue" rejection already shows an alert.
+                {
+                    const errorSpan = document.createElement("span")
+                    errorSpan.id = "logsLoadError"
+                    errorSpan.style = "text-align: center; margin: 20px; color: #e66;"
+                    errorSpan.textContent = "Failed to load the logs. Click the refresh button to try again."
+                    logsContainer.appendChild(errorSpan)
                 }
             })
         }
@@ -1495,15 +1533,16 @@ function main()
                     const multiLineSwitch = createSwitchCheckbox("Add a list of domains")
                     multiLineSwitch.firstChild.checked = NXsettings.AllowDenylistPage.MultilineTextBox
                     multiLineSwitch.firstChild.onchange = function()
-                    {
-                        NXsettings.AllowDenylistPage.MultilineTextBox = this.checked
-                        saveSettings()
+{
+    NXsettings.AllowDenylistPage.MultilineTextBox = this.checked
+    saveSettings()
 
-                        if (this.checked) {
-                            createAllowDenylistTextArea()
-                            createAllowDenyExternalListTextArea()
-                        }
-                    }
+    if (this.checked) {
+        createAllowDenylistTextArea()
+        createAllowDenyExternalListTextArea()
+    }
+    else location.reload()      // Reload to restore the original single-domain input.
+}
 
                     optionsContainer.appendChild(multiLineSwitch)
 
@@ -1582,140 +1621,141 @@ function main()
                 let urlList = []; // Global variable to hold URLs
 
                 async function fetchURLListAndStore(url) {
-                    try {
-                        const response = await fetch(url);
-                        if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
 
-                        const text = await response.text();
+        const text = await response.text();
 
-                        // Parse URLs: split by line, trim, and remove empty lines
-                        urlList = text
-                        .split('\n')
-                        .map(line => line.trim())
-                        .filter(line => line.length > 0);
+        urlList = [...new Set(                                                    // Set removes duplicate domains.
+            text.split('\n')
+                .map(line => line.split('#')[0].trim())                           // Strip full-line and inline comments.
+                .filter(line => line.length > 0 && !line.startsWith('!'))         // Drop empty lines and adblock-style comments.
+                .map(line => { const p = line.split(/\s+/); return p.length > 1 ? p[1] : p[0] })   // Support hosts-file format: "0.0.0.0 domain.com".
+                .map(d => d.replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^\*\./, "")) // Strip protocol, path and wildcard prefix.
+                .filter(d => d.includes('.') && /^[a-z0-9.-]+$/i.test(d))         // Keep only plausible domains.
+        )];
 
-                        console.log("Fetched URLs:", urlList);
-                    } catch (error) {
-                        console.error("Failed to fetch URL list:", error);
-                    }
-                }
+        console.log("Fetched URLs:", urlList);
+        return urlList;
+    } catch (error) {
+        console.error("Failed to fetch URL list:", error);
+        return [];
+    }
+}
 
 
                 function createAllowDenyExternalListTextArea() {
-                    // Make the input box allow adding a list of domains
+    // The multi-domain textarea above already replaced the original form, so the form input no longer exists.
+    // Insert the URL textarea right after the multi-domain one instead of looking for the removed form.
 
-                    const input = document.querySelector("form input")
+    const multiDomainTextArea = document.getElementById("multiDomainInput")
 
-                    if (!input)  return
+    if (!multiDomainTextArea || document.getElementById("externalListInput"))  return
 
-                    const inputHtml = input.outerHTML.replace("<input ", "<textarea ")                          // Swap the input to a textarea to make it multi-line.
-                    const container = input.parentElement.parentElement.parentElement
-                    container.firstChild.remove()                                                               // Replace with the textarea, the form that contains the input.
+    const container = multiDomainTextArea.parentElement
 
-                    let textArea = (new DOMParser).parseFromString(inputHtml, "text/html").body.firstChild      // It's required to parseFromString the HTML in order to pass AMO's code validation.
-                    container.appendChild(textArea)
+    const textArea = document.createElement("textarea")
+    textArea.id = "externalListInput"
+    textArea.spellcheck = false
+    textArea.className = multiDomainTextArea.className
+    textArea.style = "height: 63px; background-position-x: calc(100% - 20px); min-height: 38px; margin-top: 10px;"
+    textArea.placeholder = "Or add a list URL, one domain per line. Comments prefixed by # are excluded."
+    textArea.onkeypress = async function()
+    {
+        this.classList.remove("is-invalid")
+        this.nextSibling.textContent = ""
 
-                    textArea = container.firstChild
-                    textArea.style = "height: 63px; background-position-x: calc(100% - 20px); min-height: 38px;"
-                    textArea.placeholder = "Add list URL, containing one URL per line. Comments can be prefixed by # and will be excluded"
-                    textArea.onkeypress = async function()
+        if (event.key == "Enter" && !event.shiftKey)
+        {
+            event.preventDefault()
+
+            const list = (/allowlist$/.test(location.href)) ? "allowlist" : "denylist"
+            const domains = await fetchURLListAndStore(this.value.trim())
+            let numFinishedRequests = numImportedDomains = 0
+
+            if (domains.length > 60)
+            {
+                let estimatedTime = ((domains.length + domains.length * 0.2)/60).toFixed(2)
+                const estimatedTimeSplit = estimatedTime.split(".")
+                estimatedTime = estimatedTimeSplit[0] + ":" + estimatedTimeSplit[1] * 0.6
+
+                if (!confirm("It seems you are trying to import a long list of domains. Keep in mind that the server limits importing one " +
+                             "domain per second. This means that the list you are trying to import would take around "+ estimatedTime +
+                             " minutes to finish adding all the "+domains.length+" domains.\n\nIf this is a publicly available list you can instead suggest this list being included " +
+                             "among the blocklists at github.com/nextdns/metadata\n\nAre you sure you want to continue?"))
+                    return
+            }
+            else if (domains.length == 0)
+                return
+
+
+            createSpinner(spinnerContainer)
+            currentDomainSpan.style.marginLeft = "10px"
+
+            domains.reverse()
+
+            for (let i=0; i < domains.length; i++)
+            {
+                const domain = domains[i].trim()
+
+                await sleep(1000)
+
+                currentDomainSpan.textContent = domain
+
+                makeApiRequest("POST", list, {id: domain, active: true}).then(function(response)
+                {
+                    numImportedDomains++
+                    errorMsgSpan.textContent = ""
+
+                }).catch(function(response)
+                {
+                    let error
+
+                    if (response.includes("duplicate"))
+                        error = "This domain has already been added: " + domain
+                    else if (response.includes("invalid"))
+                        error = "Invalid domain: " + domain
+
+                    textArea.classList.add("is-invalid")
+                    errorMsgSpan.textContent = error
+                    errorMsgSpan.className = "invalid-feedback"
+
+                }).finally(function()
+                {
+                    numFinishedRequests++
+
+                    if (numFinishedRequests == domains.length)
                     {
-                        this.classList.remove("is-invalid")
-                        this.nextSibling.textContent = ""
-
-                        if (event.key == "Enter" && !event.shiftKey)                                            // Allow shift+ctrl to break line.
+                        if (numImportedDomains > 0)
                         {
-                            event.preventDefault()
-
-                            const list = (/allowlist$/.test(location.href)) ? "allowlist" : "denylist"
-                            const url = this.value
-                            const domains = fetchURLListAndStore(url)
-                            let numFinishedRequests = numImportedDomains = 0
-
-                            if (domains.length > 60)
-                            {
-                                let estimatedTime = ((domains.length + domains.length * 0.2)/60).toFixed(2)     // Get the gross time estimate and then add a rough estimate of the time it would take to actually finish each request, which would be around 200 ms each.
-                                const estimatedTimeSplit = estimatedTime.split(".")
-                                estimatedTime = estimatedTimeSplit[0] + ":" + estimatedTimeSplit[1] * 0.6       // Convert minutes in decimal to MM:SS.
-
-                                if (!confirm("It seems you are trying to import a long list of domains. Keep in mind that the server limits importing one " +
-                                             "domain per second. This means that the list you are trying to import would take around "+ estimatedTime +
-                                             " minutes to finish adding all the "+domains.length+" domains.\n\nIf this is a publicly available list you can instead suggest this list being included " +
-                                             "among the blocklists at github.com/nextdns/metadata\n\nAre you sure you want to continue?"))
-                                    return
-                            }
-                            else if (domains.length == 0)
-                                return
-
-
-                            createSpinner(spinnerContainer)
-                            currentDomainSpan.style.marginLeft = "10px"
-
-                            domains.reverse()                                           // Reverse the list so that the first item is the last one to be added,
-                                                                                        // appearing at the top in NextDNS, this way preserving the original order.
-                            for (let i=0; i < domains.length; i++)
-                            {
-                                const domain = domains[i].trim()
-
-                                await sleep(1000)
-
-                                currentDomainSpan.textContent = domain
-
-                                makeApiRequest("POST", list, {id: domain, active: true}).then(function(response)
-                                {
-                                    numImportedDomains++
-                                    errorMsgSpan.textContent = ""
-
-                                }).catch(function(response)
-                                {
-                                    let error
-
-                                    if (response.includes("duplicate"))
-                                        error = "This domain has already been added: " + domain
-                                    else if (response.includes("invalid"))
-                                        error = "Invalid domain: " + domain
-
-                                    textArea.classList.add("is-invalid")
-                                    errorMsgSpan.textContent = error
-                                    errorMsgSpan.className = "invalid-feedback"
-
-                                }).finally(function()
-                                {
-                                    numFinishedRequests++
-
-                                    if (numFinishedRequests == domains.length)
-                                    {
-                                        if (numImportedDomains > 0)
-                                        {
-                                            currentDomainSpan.remove()
-                                            spinnerContainer.outerHTML = '✔️'
-                                            setTimeout(() => location.reload(), 500)
-                                        }
-                                        else
-                                        {
-                                            spinnerContainer.firstChild.outerHTML = ""
-                                            currentDomainSpan.textContent = ""
-                                            currentDomainSpan.style.marginLeft = ""
-                                        }
-                                    }
-                                })
-                            }
+                            currentDomainSpan.remove()
+                            spinnerContainer.outerHTML = '✔️'
+                            setTimeout(() => location.reload(), 500)
+                        }
+                        else
+                        {
+                            spinnerContainer.firstChild.outerHTML = ""
+                            currentDomainSpan.textContent = ""
+                            currentDomainSpan.style.marginLeft = ""
                         }
                     }
+                })
+            }
+        }
+    }
 
-                    const errorMsgSpan = document.createElement("span")
-                    errorMsgSpan.className = "invalid-feedback"
-                    container.appendChild(errorMsgSpan)
+    const errorMsgSpan = document.createElement("span")
+    errorMsgSpan.className = "invalid-feedback"
 
-                    const spinnerContainer = document.createElement("span")
-                    container.appendChild(spinnerContainer)
+    const spinnerContainer = document.createElement("span")
+    const currentDomainSpan = document.createElement("span")
 
-                    const currentDomainSpan = document.createElement("span")
-                    container.appendChild(currentDomainSpan)
-                
-                
-                
-                }
+    container.appendChild(textArea)
+    container.appendChild(errorMsgSpan)
+    container.appendChild(spinnerContainer)
+    container.appendChild(currentDomainSpan)
+}
 
                 function createAllowDenylistTextArea() {
                     // Make the input box allow adding a list of domains
@@ -1732,8 +1772,9 @@ function main()
                     container.appendChild(textArea)
 
                     textArea = container.firstChild
-                    textArea.style = "height: 63px; background-position-x: calc(100% - 20px); min-height: 38px;"
-                    textArea.placeholder = "Add one or more domains, one per line. Press Enter to submit."
+textArea.id = "multiDomainInput"
+textArea.style = "height: 63px; background-position-x: calc(100% - 20px); min-height: 38px;"
+textArea.placeholder = "Add one or more domains, one per line. Press Enter to submit."
                     textArea.onkeypress = async function()
                     {
                         this.classList.remove("is-invalid")
@@ -2105,8 +2146,8 @@ function styleDomains(type, enable)
             const favicon = domainContainers[i].firstChild.querySelector("img")
             favicon.className = enable ? "ml-2 d-inline-block" : "mr-2 d-inline-block"
             domainContainers[i].firstChild.appendChild(enable ? domainContainers[i].firstChild.querySelector("img") : domainContainers[i].firstChild.querySelector("span"))        // Swap places for the favicon and domain
-            domainContainers[i].style.justifyItems = enable ? "flex-end" : "initial"
-            domainContainers[i].lastChild.style.textAlign = enable ? "right" : "left"
+            domainContainers[i].firstChild.style.textAlign = enable ? "right" : "left"      // Right-align the domain text itself (its children are inline elements).
+domainContainers[i].lastChild.style.textAlign = enable ? "right" : "left"
         }
     }
 }
@@ -2410,11 +2451,11 @@ function makeApiRequest(HTTPmethod, requestString, requestBody = null)
 
 function makeApiRequestFunc(HTTPmethod, requestString, requestBody, resolve, reject, attemptsMade = 0)
 {
-    const requestURL = "https://api.nextdns.io"+ (requestString[0] != "/" ? "/profiles/" + location.href.split("/")[3] + "/" : "") + requestString               // Update the URL for each request. This ensures that the request will be made to the correct config.
+    const requestURL = "https://api.nextdns.io"+ (requestString[0] != "/" ? "/profiles/" + location.href.split("/")[3] + "/" : "") + requestString
 
-    const xhr = isChrome ? new XMLHttpRequest() : XPCNativeWrapper(new window.wrappedJSObject.XMLHttpRequest())             // For Firefox, it's required to call XMLHttpRequest inside this wrapper, otherwise the call is ignored. In Chrome it works fine.
-    xhr.open(HTTPmethod, requestURL)
-    if (requestBody)    xhr.setRequestHeader("Content-Type", "application/json;charset=utf-8")                      // This is required when sending JSON data in the request body to the server, otherwise it returns an internal server error (500).
+    const xhr = new XMLHttpRequest()
+    xhr.open(HTTPmethod, requestURL)                                                                                          // <-- THIS LINE WAS MISSING
+    if (requestBody)    xhr.setRequestHeader("Content-Type", "application/json;charset=utf-8")
     xhr.onload = function()
     {
         if (xhr.responseText.includes("Too Many Requests")) {
@@ -2430,9 +2471,9 @@ function makeApiRequestFunc(HTTPmethod, requestString, requestBody, resolve, rej
         if (xhr.responseText.includes('"error'))
             return reject(xhr.response)
         else
-            return waitAndRetryRequest(5000)                       // When there's a network problem while making a request, try again after 5 seconds.
+            return waitAndRetryRequest(5000)
     }
-    xhr.withCredentials = true                          // Include the session cookie in the request, otherwise it responds with "Forbidden".
+    xhr.withCredentials = true
     xhr.send(requestBody)
 
 

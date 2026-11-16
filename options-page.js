@@ -1,6 +1,9 @@
-
 (async ()=>
 {
+    // Make sure the DOM is fully parsed before accessing the elements, in case the script tags are ever moved to the head.
+    if (document.readyState == "loading")
+        await new Promise(resolve => document.addEventListener("DOMContentLoaded", resolve))
+
     // Load all NX Enhanced's settings. All these functions are imported from the utils.js script.
     await loadNXsettings()
 
@@ -30,6 +33,6 @@
 
     const domainsToHide = document.getElementById("domainsToHide")
     domainsToHide.value = NXsettings.LogsPage.DomainsToHide.join("\n")
-    domainsToHide.onchange = function() { NXsettings.LogsPage.DomainsToHide = this.value.split("\n"); saveSettings() }
+    domainsToHide.onchange = function() { NXsettings.LogsPage.DomainsToHide = this.value.split("\n").filter(d => d.trim() != ""); saveSettings() }    // Ignore empty lines, as they match every domain.
 
 })()

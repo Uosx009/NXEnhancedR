@@ -1,79 +1,38 @@
-# NXEnhancedR — NX Enhanced Revived
+# [NXEnhancedR — NX Enhanced Revived](https://www.reddit.com/r/nextdns/s/6uCzXLWWWQ)
 
-My personal fixed version of **NX Enhanced**, the NextDNS web interface enhancer.
-Fixed for my own use; shared here in case it's useful to anyone else.
+My modified version of **[hjk789/NXEnhanced](https://github.com/hjk789/NXEnhanced)**, the NextDNS web interface enhancer, made by **BLBC (hjk789)** and archived since 2024, based on the fork by [network-security-toolkit](https://github.com/network-security-toolkit/NXEnhanced), then fixed for my own personal use and shared here in case it's useful to anyone else.
 
-> ⚠️ **This is not the original project.** Original by **BLBC (hjk789)**:
-> [hjk789/NXEnhanced](https://github.com/hjk789/NXEnhanced) (archived 2024).
-> This build was based on the fork by
-> [network-security-toolkit](https://github.com/network-security-toolkit/NXEnhanced)
-> (abdullahkhilji). All credit for the original extension goes to them.
-> If the original author requests removal, this repository will be taken down.
+> ⚠️ **This is not the original project**, so if the original author requests removal, this repository will be taken down. Feel free to dm me on [reddit](https://www.reddit.com/user/Uosx009) for a copy if that happens though.
 
-## 📌 Scope — read before opening an issue
+## Fixes applied on top of v5.1.3.1 can be found in [Releases](../../releases)
 
-**This fork exists ONLY to keep the extension working.** Specifically:
+## 📌 Read before opening an issue
 
-- ✅ Fixes when NextDNS changes their website/API and breaks something
-- ✅ Fixes when Chromium changes break something
-- ❌ **No new features. Ever.**
-- ❌ Feature requests and "it would be nice if..." issues will be
-  **closed without response.**
+1. This fork will only exist as a **free downloadable local extension**, it will never be paid or uploaded to any web stores, if you do find it in a web store i'am not nor will i ever be associated with that version nor will i take responsibility for anything that could occur from using that version, any new release can only be found on this repo's releases page
 
-I use this myself daily, so if something breaks for me it'll get fixed
-eventually. If it breaks for you but not for me, feel free to open an issue
-describing exactly what's broken — but there are no guarantees or timelines.
+2. **This fork exists ONLY to keep the extension working.** Specifically:
+   - ✅ Fixes when NextDNS changes their website/API and breaks something
+   - ✅ Fixes when Chromium changes break something
+   - ❌ **No new features. Ever.** Feature requests and issues will be **closed without response.**
+
+3. If something breaks or the extension stops working feel free to open an issue describing exactly what's happened, it will get fixed eventually but there are no guarantees or timelines
 
 ## 🤖 Disclosure
 
-This build was fixed with heavy AI assistance (vibecoded). I described the
-bugs, AI wrote most of the patches, I tested them. The fixes work and are
-in daily use, but they haven't been through any formal review. Use at your
-own risk.
+This build was fixed with heavy AI assistance "vibecoded", i described the bugs then AI wrote most of the patches and I tested them until we reached this version of the build. The fixes are working so far without any issues and i'm using the extension daily.
 
-## Fixes applied on top of v5.1.3.1
-
-### Critical
-- **Restored all API communication** — added the missing `xhr.open()` call in
-  `makeApiRequestFunc`, which silently broke every API request (allow/denylist
-  saving, logs loading, config import/export, TLD adding, etc.)
-
-### Logs page
-- Fixed the "List queries before" filter defaulting to UTC instead of local time
-- Fixed `to=NaN` being sent when the date input is empty, which permanently
-  wedged the log loader
-- A failed log request no longer leaves the spinner stuck forever
-- Fixed multi-term search (an array was accidentally passed as the search string)
-- A lone `-` in search no longer hides every entry
-- Entries missing `reasons` no longer crash the renderer (another stuck spinner)
-- Entries without a root domain no longer display "undefined"
-- Empty lines in "domains to hide" no longer match every domain and hide all logs
-- The refresh button now respects an active "List queries before" filter
-
-### Allowlist/Denylist pages
-- Fixed the "add a list from URL" textarea, which could never appear
-- URL list imports now strip `#` comments, support hosts-file format
-  (`0.0.0.0 domain.com`), remove duplicates, and skip invalid lines
-- "Right-aligned" now actually right-aligns the domain text
-- Turning off "Add a list of domains" now reloads to restore the original input
-
-### Settings & storage
-- Fixed a race condition where rapid setting changes could overwrite each other
-- Domain descriptions stored as an array are migrated to an object automatically
-- Removed a redundant storage listener that caused double-initialization
+If you don't like that this fork is working because of AI or you'd prefer labeling it as just "ai slop" even though its working perfectly, simply don't use it no one is forcing you to do anything, although i'd rather not have you embarrass yourselves in public with your attention seeking cries like on the comments of the reddit post (which i'm sure there will be more of), i personally couldn't care less what you think or say well unless you can prove that this "ai slop" doesn't work (which you can't Imao), so go ahead the comments are wide open for you to shine no one is stopping you lol
 
 ## Installation
 
 1. Download the latest zip from [Releases](../../releases)
-2. Extract it somewhere **permanent**, the browser will load the extension from
-   this folder so don't delete it afterwards!
+2. Extract it somewhere **permanent**, so the browser can always load it with no issues
 3. Open `chrome://extensions` in Chrome, Brave, Edge, Opera or Vivaldi
 4. Enable **Developer mode** (top-right toggle)
 5. Click **Load unpacked** and select the extracted folder
 6. Log into [my.nextdns.io](https://my.nextdns.io)
 
-Tested on Brave (Windows). Should work on other Chromium browsers.
-Firefox untested.
+So far this was tested on Brave (Windows) by me and on [Brave (MacOS)](https://imgur.com/vhuUwUy), it should work on other Chromium browsers too. Firefox is still untested.
 
 ## Credits & license
 
